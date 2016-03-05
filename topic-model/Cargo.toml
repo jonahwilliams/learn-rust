@@ -1,0 +1,9 @@
+[package]
+name = "topic-model"
+version = "0.1.0"
+authors = ["Jonah Williams <campfish91@gmail.com>"]
+
+[dependencies]
+csv = "0.14"
+rand = "0.3"
+itertools = "0.4"
