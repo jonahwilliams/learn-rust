@@ -1,14 +1,84 @@
-//#![allow(dead_code)]
+#![allow(dead_code)]
 extern crate csv;
 extern crate rand;
 //#[macro_use] extern crate itertools;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use rand::distributions::{IndependentSample, Range};
 //use itertools::Itertools;
 
 type Encoder = HashMap<String, u32>;
 type Decoder = HashMap<u32, String>;
+
+//https://www.cs.princeton.edu/~blei/papers/BleiNgJordan2003.pdf
+
+// Corpora -> Document -> Word
+// Word: basic unit of discrete data indexed by {1,...,V}
+//       Where V is the fixed size of our vocabulary.
+//       A Word is represented as a unit vecotr in V dimensional
+//       Space. e.g. [0, 0, 0, 1, ..., 0]
+// Document: a sequence of N words denoted by w = (w1, w2, ..., wN)
+//       Where wN is the Nth word in the sequence.
+// Corpus: a collection of M documents denoted by D = (w1, w2, .., wM)
+
+
+// Basic model with types.  Note that if we use this represntation
+// in the sampling stage, we'll have several additional O(n) steps
+type Word = u32;
+type Topic = u32;
+
+struct Document {
+    words: HashSet<Word>,
+    word_counts: HashMap<Word, u32>,
+    word_topics: HashMap<Word, Topic>,
+    topic_counts: Vec<u32>
+}
+
+struct Corpus {
+    docs: Vec<Document>,
+    topic_counts: Vec<u32>,
+    topic_counts_by_word: Vec<HashMap<Word, u32>>,
+    topic_p: Vec<f64>,
+    num_topics: usize
+}
+
+// Sampling step:
+// For each Word w in each Document D:
+// For each topic Z calculate P(Z |W,D)
+//  (Count of w in topic Z + Beta_w)/(Count of all words in topic Z + B)*(Count of w` in D in topic Z + alpha)
+// Choose new topic for w distributed across the above probabilities
+fn sample(corp: &mut Corpus) {
+    let between = Range::new(0.0, 1.0);
+    let mut rng = rand::thread_rng();
+
+    for d in corp.docs.iter_mut() {
+        for w in d.words.iter() {
+            // For each Topic Calculate P(Z|W,D)
+            // The 1.0 are currently fixed hyperparameter values BW, B, A
+            for z in 0..corp.num_topics {
+                corp.topic_p[z] = (corp.topic_counts_by_word[z][w] as f64) /
+                    (corp.topic_counts[z] as f64) *
+                    (d.topic_counts[z] as f64 );
+                if z > 0 {
+                    corp.topic_p[z] += corp.topic_p[z - 1];
+                }
+            }
+            // corp.topic_p = [0.32, 0.001, 0.222, ...] = 1
+            // randomly choose new topic for W
+            let roll = between.ind_sample(&mut rng);
+            let mut new_topic: Topic = 0;
+            'roll: for z in 0..corp.num_topics {
+                if roll < corp.topic_p[z] {
+                    new_topic = z as u32;
+                    break 'roll;
+                }
+            }
+            // Now we have reassigned word W to topic Z in document D,
+            // and we must update everything
+            d.word_topics[w] = new_topic;
+        }
+    }
+}
 
 /*
     LDA Model
@@ -38,6 +108,9 @@ impl LDA {
         let w: Vec<Vec<u32>> = dataset
             .iter()
             .map(|x| {
+                // Takes a reference to a string and a reference to the encoder
+                // HashMap and produces a vector of word tokens.  unmmatched
+                // strings are ignored
                 x.split(" ")
                 .map(|x| match enc.get(x) {
                     Some(y) => y.clone(),
@@ -136,27 +209,13 @@ impl LDA {
         }
         (encoder, decoder)
     }
-
-    // Takes a reference to a string and a reference to the encoder
-    // HashMap and produces a vector of word tokens.  unmmatched
-    // strings are ignored
-    fn tokenize(phrase: &str, encoder: &Encoder) -> Vec<u32> {
-        phrase
-            .split(" ")
-            .map(|x| match encoder.get(x) {
-                Some(y) => y.clone(),
-                None => 0
-            })
-            .filter(|&x| x > 0)
-            .collect::<Vec<u32>>()
-    }
 }
 
 fn main() {
     let data = vec!(
         "I've heard this advice over and over and over at startup events".to_string(),
         "to the point that I got a little sick of hearing it. It's not wrong.".to_string(),
-        "to the point that I got a little sick of hearing it. It's not wrong.".to_string()
+        "This is another example of my test sentence".to_string()
     );
     let mut lda = LDA::new(2, "./data/words.csv", data);
     lda.sample();
