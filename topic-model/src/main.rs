@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+//#![allow(dead_code)]
 extern crate csv;
 extern crate rand;
 //#[macro_use] extern crate itertools;
@@ -33,25 +33,30 @@ impl LDA {
         let between = Range::new(0, num_topics);
         let mut rng = rand::thread_rng();
 
-        for item in &dataset {
-            print!("{}", item);
-        }
-
         // dataset is provided externally, and here is represented by a vector
         // of strings.  map over each one and tokenize it with the encoder.
         let w: Vec<Vec<u32>> = dataset
             .iter()
-            .map(|x| LDA::tokenize(x, &enc))
+            .map(|x| {
+                x.split(" ")
+                .map(|x| match enc.get(x) {
+                    Some(y) => y.clone(),
+                    None => 0
+                })
+                .filter(|&x| x > 0)
+                .collect::<Vec<u32>>()
+            })
             .collect::<Vec<Vec<u32>>>();
 
         // Randomly initialize a matching vector of topics
-        let mut t: Vec<Vec<u32>> = Vec::with_capacity(w.len());
-        for i in 0..w.len() {
-            let mut tt = Vec::with_capacity(w[i].len());
-            for j in 0..w[i].len() {
-                tt[j] = between.ind_sample(&mut rng);
+        let n = w.len();
+        let mut t: Vec<Vec<u32>> = Vec::with_capacity(n);
+        for i in 0..n {
+            let mut tt = Vec::with_capacity(n);
+            for _ in 0..w[i].len() {
+                tt.push(between.ind_sample(&mut rng));
             }
-            t[i] = tt;
+            t.push(tt);
         }
 
         LDA {
@@ -137,13 +142,13 @@ impl LDA {
     // strings are ignored
     fn tokenize(phrase: &str, encoder: &Encoder) -> Vec<u32> {
         phrase
-            .split("\\P{L}+")
+            .split(" ")
             .map(|x| match encoder.get(x) {
                 Some(y) => y.clone(),
                 None => 0
             })
             .filter(|&x| x > 0)
-            .collect()
+            .collect::<Vec<u32>>()
     }
 }
 
@@ -153,14 +158,7 @@ fn main() {
         "to the point that I got a little sick of hearing it. It's not wrong.".to_string(),
         "to the point that I got a little sick of hearing it. It's not wrong.".to_string()
     );
-    // data[1] = "to the point that I got a little sick of hearing it. It's not wrong.".to_string();
-    // data[2] = "Putting aside the fact that every single other startup in the world who".to_string();
-    // data[3] = "heard this same advice before you is already out there frantically doing".to_string();
-    // data[4] = "everything they can to hire all the best people out from under you and everyone else".to_string();
-    // data[5] = "it is superficially true. A company staffed by a bunch of people who don't care".to_string();
-    // data[6] = "about their work and aren't good at their jobs isn't exactly poised for success.".to_string();
-    // data[7] = "But in a room full of people giving advice to startups, nobody wants to talk about".to_string();
-    // data[8] = "the elephant in that room".to_string();
-    let lda = LDA::new(32, "./data/data.csv", data);
-    return;
+    let mut lda = LDA::new(2, "./data/words.csv", data);
+    lda.sample();
+
 }
