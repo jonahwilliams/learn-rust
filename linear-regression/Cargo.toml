@@ -1,0 +1,8 @@
+[package]
+name = "linear-regression"
+version = "0.1.0"
+authors = ["Jonah Williams <campfish91@gmail.com>"]
+
+[dependencies]
+csv = "*"
+rand = "*"
